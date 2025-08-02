@@ -58,6 +58,7 @@ class TrafficLightDetector:
         # print(self.yellow_mask)
         
     def detect(self):
+        # 여기서 바로 True False 보내도됨
 
         if cv2.countNonZero(self.red_mask) > 2:
             print('****')

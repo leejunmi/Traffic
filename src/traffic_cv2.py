@@ -170,7 +170,8 @@ class Traffic:
 def main():
     rospy.init_node('traffic_sign')
     VIDEO_MODE = True # False: MORAI
-    VIDEO_PATH = "/home/leejunmi/VIDEO/output6.avi"
+    VIDEO_PATH = "/home/leejunmi/VIDEO/output1.avi"
+    # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/no_gps_obstacle#5.avi'
 
     traffic = Traffic(video_mode=VIDEO_MODE, video_path=VIDEO_PATH)
 

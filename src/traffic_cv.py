@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 
+'''
+바꿀것
+cv: FOV 20
+yolo: FOV 50, PT_PATH, VIDEO_MODE
+'''
+# left_green detect하는 버전
+# 박스 기준으로 roi 해도 괜찮을듯
+
 import rospy
 import cv2
 import numpy as np
@@ -10,32 +18,18 @@ from ultralytics import YOLO
 from cv_bridge import CvBridge
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
-from enum import IntEnum
-
-# from Traffic_Light_Detector import TrafficLightDetector
-
-#from ultralytics import YOLO
 
 
 class TrafficLightDetector:
-    def __init__(self, image, x, y, w, h):
+    ''' 원주 기준 HSV값 '''
+
+    def __init__(self, image):
+        cv2.imshow("image", image)
+        self.traffic_pub = rospy.Publisher('/stop', Bool, queue_size=5)
 
         height, width = image.shape[0], image.shape[1]
 
-        self.roi = image[0:height-250,:]
-        # self.roi = image[y+h_roi:y+h-h_roi, x:x+w]
-        # self.roi1 = image[y+h_roi:y+h-h_roi, x+w//12:x+w*3//12]
-        # self.roi2 = image[y+h_roi:y+h-h_roi, x+w*4//12:x+w*6//12]
-        # self.roi3 = image[y+h_roi:y+h-h_roi, x+w*6//12:x+w*8//12]
-        # self.roi4 = image[y+h_roi:y+h-h_roi, x+w*9//12:x+w]
-
-        try:
-            cv2.imshow('ROI', self.roi)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                print('no frame')
-        except cv2.error as e:
-            print(f'cv2 error: {e}')
-            
+        self.roi = image[30:height-150,:]
     
         self.hsv = cv2.cvtColor(self.roi, cv2.COLOR_BGR2HSV)
 
@@ -45,55 +39,122 @@ class TrafficLightDetector:
         self.red_lower2 = np.array([170, 200, 200])
         self.red_upper2 = np.array([180, 255, 255])
 
-        self.yellow_lower = np.array([20, 70, 70])  
+        self.yellow_lower = np.array([20, 100, 100])  
         self.yellow_upper = np.array([35, 255, 255])  
 
-        self.green_lower = np.array([35, 100, 100]) 
+        self.green_lower = np.array([35, 115, 115]) 
         self.green_upper = np.array([100, 255, 255])  
 
+        #####################
         self.red_mask = cv2.inRange(self.hsv, self.red_lower, self.red_upper)
-        # self.red_mask2 = cv2.inRange(self.hsv, self.red_lower2, self.red_upper2) # 쨍한 빨간색 추가
-        # self.red_mask = cv2.bitwise_or(self.red_mask, self.red_mask2)
-
+        self.red_mask2 = cv2.inRange(self.hsv, self.red_lower2, self.red_upper2) # 쨍한 빨간색 추가
+        self.red_mask = cv2.bitwise_or(self.red_mask, self.red_mask2)
         self.yellow_mask = cv2.inRange(self.hsv, self.yellow_lower, self.yellow_upper)
         self.green_mask = cv2.inRange(self.hsv, self.green_lower, self.green_upper)
-
-        # self.hsv = cv2.cvtColor(self.roi, cv2.COLOR_HSV2BGR)
+        self.left_green_mask = np.zeros_like(self.green_mask)
 
         self.all_mask = cv2.bitwise_or(self.red_mask, self.green_mask)
+        self.all_mask = cv2.bitwise_or(self.all_mask, self.yellow_mask)
+        # self.all_mask = self.remove_small(self.all_mask, 20) # 작은 컴포넌트 제거하고 싶을때
 
-        cv2.imshow("mask", cv2.bitwise_and(self.roi, self.roi, mask=self.all_mask))
+        real_mask = cv2.bitwise_and(self.roi, self.roi, mask=self.all_mask)
 
-        # cv2.imshow("red",self.red_mask)
+        self.find_max(self.green_mask, real_mask)
+        self.find_max_red(self.red_mask, real_mask)
+        self.find_max_red(self.yellow_mask, real_mask)
 
+        try:
+            cv2.imshow("mask", real_mask)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                print('no frame')
+        except cv2.error as e:
+            print(f'cv2 error: {e}')
+
+    def find_max_red(self, img, real_mask):
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(img)
+
+        if num_labels > 1:
+            max_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])  # 0번은 배경
+            x, y, w, h, area = stats[max_label]
+            cx, cy = centroids[max_label]
+
+            if area > 130:
+                # print(f"가장 큰 덩어리 중심: ({cx:.1f}, {cy:.1f}), 면적: {area}")
+                # print(f"바운딩 박스: x={x}, y={y}, w={w}, h={h}")
+
+                cv2.rectangle(real_mask, (x, y), (x + w, y + h), (255, 255, 255), 2)
+                cv2.circle(real_mask, (int(cx), int(cy)), 3, (0, 0, 255), -1)
+
+    def find_max(self,img,real_mask):
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(img)
+
+        if num_labels > 1:
+            max_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])  # 0번은 배경
+            x, y, w, h, area = stats[max_label]
+            cx, cy = centroids[max_label]
+
+            if area > 130:
+                print(f"가장 큰 덩어리 중심: ({cx:.1f}, {cy:.1f}), 면적: {area}")
+                print(f"바운딩 박스: x={x}, y={y}, w={w}, h={h}")
+
+                cv2.rectangle(real_mask, (x, y), (x + w, y + h), (255, 255, 255), 2)
+                cv2.circle(real_mask, (int(cx), int(cy)), 3, (0, 0, 255), -1)
+
+                # 왼쪽 바운딩 박스
+                diff = w+5
+                cv2.rectangle(real_mask, (x-diff, y), (x + w - diff, y + h), (0, 255, 255), 2)
+
+                x1 = max(x - diff, 0)
+                x2 = min(x + w - diff, self.hsv.shape[1])
+                y1 = max(y, 0)
+                y2 = min(y + h, self.hsv.shape[0])
+                self.left_green_roi = self.hsv[y1:y2, x1:x2]
+                self.left_green_mask = cv2.inRange(self.left_green_roi, self.green_lower, self.green_upper)
+                
+
+    def remove_small(self, img: np.ndarray, min_num):
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(img, connectivity=8)
+        for L in range(1, num_labels):
+            if stats[L, cv2.CC_STAT_AREA] < min_num:
+                img[labels == L] = 0
+            elif stats[L, cv2.CC_STAT_AREA] > 1000:
+                img[labels == L] = 0
+            # print(stats[L, cv2.CC_STAT_AREA])
+        return img
         
     def detect(self):
         print(f'red:{cv2.countNonZero(self.red_mask)}')
         print(f'green:{cv2.countNonZero(self.green_mask)}')
+        print(f'yellow:{cv2.countNonZero(self.yellow_mask)}')
 
-        if cv2.countNonZero(self.red_mask) > 2:
-            print('****')
-            if cv2.countNonZero(self.green_mask) > 0:
+        mask_threshold = 180
+
+        print()
+        print('### Traffic ###')
+
+        if cv2.countNonZero(self.red_mask) > mask_threshold:
+            self.traffic_pub.publish(Bool(data=True))
+            if cv2.countNonZero(self.green_mask) > mask_threshold:
                 return 'red_and_green'
-            elif cv2.countNonZero(self.yellow_mask) > 0:
+            elif cv2.countNonZero(self.yellow_mask) > mask_threshold:
                 return 'red_and_yellow'
             else:
                 return 'red'
 
-        elif cv2.countNonZero(self.yellow_mask) > 0:
+        elif cv2.countNonZero(self.yellow_mask) > mask_threshold:
+            self.traffic_pub.publish(Bool(data=False))
             return 'yellow'
          
-        # elif cv2.countNonZero(self.green_mask) > 5:
-        #     if cv2.countNonZero(self.green_mask) > 3:
-        #         return 'all_green'
-        #     else:
-        #         return 'green'
-        # elif cv2.countNonZero(self.green_mask_sign) > 0:
-        #     return 'left_green'
+        elif cv2.countNonZero(self.green_mask) > mask_threshold:
+            self.traffic_pub.publish(Bool(data=False))
+            if cv2.countNonZero(self.left_green_mask) > 50:
+                return 'left_and_green'
+            else:
+                return 'green'
         
         else:
+            self.traffic_pub.publish(Bool(data=False))
             return 'none'
-
 
 class Traffic():
     def __init__(self, video_mode=False, video_path=None):
@@ -104,14 +165,6 @@ class Traffic():
         self.class_count = 0
         
         self.traffic_sign = 'Go'
-
-        # PT_PATH = '/home/macaron/best_train_custom2.pt'
-        # PT_PATH = '/home/macaron/traffic_04_17.pt'
-        PT_PATH = '/home/leejunmi/catkin_ws/src/vision/src/best_train_custom2.pt'
-
-        self.model = YOLO(PT_PATH)
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.model.to(self.device)
 
         self.traffic_pub = rospy.Publisher('/stop', Bool, queue_size=5)
         # rospy.Subscriber('/self.current_s', float, self.s_callback, queue_size=5)
@@ -141,109 +194,32 @@ class Traffic():
         self.traffic_flag = any(s - 5.0 < self.current_s < s for s in self.stop_s)
         print(f'traffic:{self.traffic_flag}')
     
-    def roi(img):
-        height, width = img.shape[0], img.shape[1]
-        img = img[0:height-150,:]
-
 
     def img_callback(self, img_msg):
         try:
             img = self.bridge.compressed_imgmsg_to_cv2(img_msg, "bgr8")
 
-            # roi_img = self.roi(img)
-            # self.yolo_detection(roi_img)
             self.cv_detection(img)
 
         except Exception as e:
             rospy.logerr(f'callback error: {e}')
 
-    def traffic_cnt_check(self, cls, conf, x1, y1, x2, y2):
-        # HSV version
-        if self.last_detected_class is None:
-            self.last_detected_class = cls
-            self.class_count = 1
-            return
-        
-        if cls == self.last_detected_class:
-            self.class_count += 1
-        else:
-            if self.class_count < 2:
-                return
-            else: # 이전 클래스 2회 이상이면 업데이트
-                self.last_detected_class = cls
-                self.class_count = 1
-                return 
-            
-        label = f'{traffic_info(cls).name} {conf:.2f}' 
-
-        if self.class_count >= 2:
-            '''0729'''
-            if cls == traffic_info.green: 
-                self.traffic_pub.publish(Bool(data=False))
-                print('Go')
-                cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(self.result_image, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-            elif cls == traffic_info.red:
-                self.traffic_pub.publish(Bool(data=True))
-                print('Stop')
-                cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(self.result_image, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                
-            elif cls == traffic_info.yellow:
-                self.traffic_pub.publish(Bool(data=True))
-                print('ready to Stop')
-                cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
-                cv2.putText(self.result_image, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-            elif cls == traffic_info.none:
-                self.traffic_pub.publish(Bool(data=False))
-                print('Invisible')
-                cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (255, 255, 255), 2)
-                cv2.putText(self.result_image, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-            #################
-            
-            elif cls == traffic_info.red_and_green:
-                self.traffic_pub.publish(Bool(data=False))
-                print('red_and_green')
-                cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(self.result_image, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                
-            elif cls == traffic_info.red_and_yellow:
-                self.traffic_pub.publish(Bool(data=False))
-                print('red_and_yellow')
-                cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
-                cv2.putText(self.result_image, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-            elif cls == traffic_info.all_green:
-                self.traffic_pub.publish(Bool(data=True))
-                print('all_green')
-                cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(self.result_image, label, (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                
     def cv_detection(self,img):
         self.result_image = img.copy()
 
-        detector = TrafficLightDetector(self.result_image, 1,1,1,1)
+        detector = TrafficLightDetector(self.result_image)
 
         label_data = detector.detect()
         print(f'label: {label_data}')
 
         
-
 def main():
     rospy.init_node('traffic_sign')
 
     # True = 영상 / False = morai
     VIDEO_MODE = True
-    VIDEO_PATH = "/home/leejunmi/catkin_ws/src/vision/src/output2.avi" 
-    # VIDEO_PATH = "/home/leejunmi/catkin_ws/src/vision/src/no_gps_NoObstacle#5.mp4"
+    # VIDEO_PATH = "/home/leejunmi/catkin_ws/src/vision/src/output2.avi" 
+    VIDEO_PATH = "/home/leejunmi/VIDEO/output5.avi"
     # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/no_gps_obstacle#5.avi'
     # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/스크린샷, 2025년 07월 28일 20시 35분 13초.webm'
     # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/스크린샷, 2025년 07월 28일 20시 33분 33초.webm'
@@ -251,7 +227,7 @@ def main():
     traffic = Traffic(video_mode=VIDEO_MODE, video_path=VIDEO_PATH)
 
     if VIDEO_MODE:
-        rate = rospy.Rate(1)  
+        rate = rospy.Rate(33) 
         while not rospy.is_shutdown():
             ret, frame = traffic.cap.read()
             if not ret:

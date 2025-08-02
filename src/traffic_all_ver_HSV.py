@@ -121,12 +121,9 @@ class Traffic():
         if cls == self.last_detected_class:
             self.class_count += 1
         else:
-            if self.class_count < 2:
-                return
-            else: # 이전 클래스 2회 이상이면 업데이트
-                self.last_detected_class = cls
-                self.class_count = 1
-                return 
+            self.last_detected_class = cls
+            self.class_count = 1
+            return
             
         label = f'{traffic_info(cls).name} {conf:.2f}' 
 
@@ -188,7 +185,7 @@ class Traffic():
         # self.check_s()
         # if self.traffic_flag == False:
         # print('no traffic_s')
-        
+
         cv2.imshow('YOLO Traffic Detection', self.result_image)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             rospy.signal_shutdown("User pressed 'q'")
