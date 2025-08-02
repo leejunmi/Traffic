@@ -12,89 +12,8 @@ from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 from enum import IntEnum
 
-# from Traffic_Light_Detector import TrafficLightDetector
+from Traffic_Light_Detector import TrafficLightDetector
 
-#from ultralytics import YOLO
-
-''' 3구일때 처리 필요함 '''
-
-# class TrafficLightDetector:
-#     def __init__(self, image, x, y, w, h):
-#         h_roi  = h//3 
-#         print(f'w,h:{w},{h}')
-
-#         # if h*3 > w: # 3구
-        
-#         self.roi = image[y+h_roi:y+h-h_roi, x:x+w]
-#         self.roi1 = image[y+h_roi:y+h-h_roi, x+w//12:x+w*3//12]
-#         self.roi2 = image[y+h_roi:y+h-h_roi, x+w*4//12:x+w*6//12]
-#         self.roi3 = image[y+h_roi:y+h-h_roi, x+w*6//12:x+w*8//12]
-#         self.roi4 = image[y+h_roi:y+h-h_roi, x+w*9//12:x+w]
-
-#         try:
-#             cv2.imshow('ROI', self.roi)
-#             if cv2.waitKey(1) & 0xFF == ord('q'):
-#                 print('no frame')
-#         except cv2.error as e:
-#             print(f'cv2 error: {e}')
-            
-        
-#         # Convert ROI to HSV color space.
-#         self.hsv = cv2.cvtColor(self.roi, cv2.COLOR_BGR2HSV)
-#         self.hsv1 = cv2.cvtColor(self.roi1, cv2.COLOR_BGR2HSV)
-#         self.hsv2 = cv2.cvtColor(self.roi2, cv2.COLOR_BGR2HSV)
-#         self.hsv3 = cv2.cvtColor(self.roi3, cv2.COLOR_BGR2HSV)
-#         self.hsv4 = cv2.cvtColor(self.roi4, cv2.COLOR_BGR2HSV)
-#         #cv2.imshow("test",self.hsv)
-#         # #cv2.imshow(np.hstack((self.hsv1,self.hsv2,self.hsv3,self.hsv4)))
-        
-#         self.red_lower = np.array([0, 120, 70])
-#         self.red_upper = np.array([10, 255, 255])
-
-#         self.red_lower2 = np.array([170, 200, 200])
-#         self.red_upper2 = np.array([180, 255, 255])
-
-#         self.yellow_lower = np.array([20, 70, 70])  
-#         self.yellow_upper = np.array([35, 255, 255])  
-
-#         self.green_lower = np.array([35, 80, 80]) 
-#         self.green_upper = np.array([100, 255, 255])  
-
-#         self.red_mask = cv2.inRange(self.hsv1, self.red_lower, self.red_upper)
-#         self.red_mask2 = cv2.inRange(self.hsv1, self.red_lower2, self.red_upper2) # 쨍한 빨간색 추가
-
-#         self.red_mask = cv2.bitwise_or(self.red_mask, self.red_mask2)
-
-#         self.yellow_mask = cv2.inRange(self.hsv2, self.yellow_lower, self.yellow_upper)
-
-#         self.green_mask_sign = cv2.inRange(self.hsv3, self.green_lower, self.green_upper)
-#         self.green_mask = cv2.inRange(self.hsv4, self.green_lower, self.green_upper)
-#         # print(self.yellow_mask)
-        
-#     def detect(self):
-
-#         if cv2.countNonZero(self.red_mask) > 2:
-#             print('****')
-#             if cv2.countNonZero(self.green_mask_sign) > 0:
-#                 return 'red_and_green'
-#             elif cv2.countNonZero(self.yellow_mask) > 0:
-#                 return 'red_and_yellow'
-#             else:
-#                 return 'red'
-
-#         elif cv2.countNonZero(self.yellow_mask) > 0:
-#             return 'yellow'
-         
-#         elif cv2.countNonZero(self.green_mask) > 0:
-#             if cv2.countNonZero(self.green_mask_sign) > 0:
-#                 return 'all_green'
-#             else:
-#                 return 'green'
-#         elif cv2.countNonZero(self.green_mask_sign) > 0:
-#             return 'left_green'
-        
-#         else:
-#             return 'none'
 
 class traffic_info(IntEnum):
     # red = 0
@@ -102,7 +21,7 @@ class traffic_info(IntEnum):
     # Invisible = 2
     # left_green = 3
 
-    ##              best_train_custom2.pt
+    # best_train_custom2.pt
     # green_arrow_and_green_arrow = 0
     # red = 1
     # green_and_green_arrow = 2
@@ -110,10 +29,10 @@ class traffic_info(IntEnum):
     # green = 4
     # yellow = 5
     # red_and_yellow = 6
-    # green_and_yellow = 7 # 안쓰는게 
+    # green_and_yellow = 7
     # red_and_green_arrow = 8
 
-    ## HSV version
+    # HSV version
     red = 0
     green = 1
     yellow = 2
@@ -142,12 +61,6 @@ class Traffic():
         self.model.to(self.device)
 
         self.traffic_pub = rospy.Publisher('/stop', Bool, queue_size=5)
-        # rospy.Subscriber('/self.current_s', float, self.s_callback, queue_size=5)
-
-        self.current_s = 0.0
-        self.stop_s = [5.0, 20.0, 30.0] 
-
-        self.traffic_flag = False
 
         self.video_mode = video_mode
         self.video_path = video_path
@@ -161,15 +74,15 @@ class Traffic():
                 rospy.logerr("no video")
                 exit()
 
-    def s_callback(self,msg):
-        if self.current_s != 0.0:
-            self.current_s = msg.data
+    # def s_callback(self,msg):
+    #     if self.current_s != 0.0:
+    #         self.current_s = msg.data
 
-    def check_s(self):
-        threshold = 10.0
-        self.traffic_flag = any(s - threshold < self.current_s < s for s in self.stop_s)
+    # def check_s(self):
+    #     threshold = 10.0
+    #     self.traffic_flag = any(s - threshold < self.current_s < s for s in self.stop_s)
 
-        print(f'traffic:{self.traffic_flag}')
+    #     print(f'traffic:{self.traffic_flag}')
     
     def roi_img(self,img):
         height, width = img.shape[0], img.shape[1]
@@ -179,9 +92,8 @@ class Traffic():
 
         # 원주 
         # img = img[0:height-200, width+30:width-30]
-
+ 
         return img
-
 
     def img_callback(self, img_msg):
         try:
@@ -272,15 +184,15 @@ class Traffic():
     def yolo_detection(self, img):
 
         self.result_image = self.roi_img(img)
-        # self.result_image = img.copy()
         
-        self.check_s()
-        if self.traffic_flag == False:
-                print('no traffic_s')
-                cv2.imshow('YOLO Traffic Detection', self.result_image)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    rospy.signal_shutdown("User pressed 'q'")
-                return
+        # self.check_s()
+        # if self.traffic_flag == False:
+        # print('no traffic_s')
+        
+        cv2.imshow('YOLO Traffic Detection', self.result_image)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            rospy.signal_shutdown("User pressed 'q'")
+            return
 
         results = self.model(img)[0]
 
@@ -314,7 +226,7 @@ class Traffic():
         label_data = detector.detect()
         print(f'label: {label_data}')
 
-        # 카운트 사용하려면
+        # 카운트 사용
         self.traffic_cnt_check(traffic_info[label_data], conf, x1,y1,x2,y2)
 
         ############# 전체 object 기준
@@ -337,7 +249,7 @@ def main():
 
     # True = 영상 / False = morai
     VIDEO_MODE = True
-    VIDEO_PATH = "/home/leejunmi/catkin_ws/src/vision/src/output1.avi" 
+    VIDEO_PATH = "/home/leejunmi/VIDEO/output3.avi" 
     # VIDEO_PATH = "/home/leejunmi/catkin_ws/src/vision/src/no_gps_NoObstacle#5.mp4"
     # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/no_gps_obstacle#5.avi'
     # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/스크린샷, 2025년 07월 28일 20시 35분 13초.webm'
@@ -346,7 +258,7 @@ def main():
     traffic = Traffic(video_mode=VIDEO_MODE, video_path=VIDEO_PATH)
 
     if VIDEO_MODE:
-        rate = rospy.Rate(1)  
+        rate = rospy.Rate(33)  
         while not rospy.is_shutdown():
             ret, frame = traffic.cap.read()
             if not ret:
@@ -369,9 +281,10 @@ if __name__ == '__main__':
 
 ####################
 # 수정해야할것
-# 1.중간에 디텍 안 되는 거 왜그런지 ..
+# 1.중간에 디텍 안 될 때??
 # 2.원주 기준 -> ROI 조절(너무 왼쪽. 오른쪽에 있는 박스 안 보도록)
 
 # 어떤 신호등 있는지
 # yellow 몇초인지
 # 0nly_traffic_lane 써보기
+# 
