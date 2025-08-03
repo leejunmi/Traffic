@@ -69,7 +69,7 @@ class TrafficLightDetector:
         cx, cy = centroids[max_label]
 
         # print(f"중심: ({cx:.1f}, {cy:.1f}), 면적: {area}")
-        # print(f"박스: x={x}, y={y}, w={w}, h={h}")
+        # print(f"박스: x={x}, y={y}, w={w}, h={h}") 
 
         cv2.rectangle(self.visual_img, (x, y), (x + w, y + h), (255, 255, 255), 2)
         cv2.circle(self.visual_img, (int(cx), int(cy)), 3, (0, 0, 255), -1)
