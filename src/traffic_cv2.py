@@ -8,6 +8,13 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
+'''
+가장 큰 컴포넌트 기준 바운딩박스 생성 -> 바운딩박스를 ROI로 HSV 판단
+green 왼쪽 기준 left_green 판단
+
+FOV 50
+'''
+
 
 class TrafficLightDetector:
     def __init__(self, image):
@@ -169,7 +176,7 @@ class Traffic:
 
 def main():
     rospy.init_node('traffic_sign')
-    VIDEO_MODE = True # False: MORAI
+    VIDEO_MODE = False # False: MORAI
     VIDEO_PATH = "/home/leejunmi/VIDEO/output1.avi"
     # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/no_gps_obstacle#5.avi'
 
