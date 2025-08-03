@@ -9,12 +9,12 @@ from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
 '''
-가장 큰 컴포넌트 기준 바운딩박스 생성 -> 바운딩박스를 ROI로 HSV 판단
-green 왼쪽 기준 left_green 판단
+원주 Map
+전체 HSV mask에서 가장 큰 컴포넌트 기준 바운딩박스 생성 -> 바운딩박스를 ROI로 HSV 판단,
+green_mask는 박스 왼쪽 바운딩박스로 판단
 
 FOV 50
 '''
-
 
 class TrafficLightDetector:
     def __init__(self, image):
@@ -96,6 +96,7 @@ class TrafficLightDetector:
         thres = 50
         if r > thres and r > y and r > g:
             self.final_decision = 'red'
+            
         elif y > thres and y > r and y > g:
             self.final_decision = 'yellow'
         elif g > thres and g > r and g > y:
@@ -176,8 +177,8 @@ class Traffic:
 
 def main():
     rospy.init_node('traffic_sign')
-    VIDEO_MODE = False # False: MORAI
-    VIDEO_PATH = "/home/leejunmi/VIDEO/output1.avi"
+    VIDEO_MODE = True # False: MORAI
+    VIDEO_PATH = "/home/leejunmi/VIDEO/output3.avi"
     # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/no_gps_obstacle#5.avi'
 
     traffic = Traffic(video_mode=VIDEO_MODE, video_path=VIDEO_PATH)
