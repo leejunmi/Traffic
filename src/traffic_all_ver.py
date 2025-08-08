@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 
-'''정지선 S값 기준에서만 판단하는 코드'''
-
-# best_traffic: 사용할거면 - 빨노 들어오면 무조건 빨노, 빨노 없고 빨좌 들어오면 빨좌
-# 0729: 얘는 잡긴 잡음, 근데  red랑 섞여 들어온다
-
-# 가끔 바운딩박스 안 그려지는거 왜그러지?
-
-
 import rospy
 import cv2
 import numpy as np
@@ -112,7 +104,6 @@ class Traffic():
     def traffic_cnt_check(self, cls, conf, x1, y1, x2, y2):
         # cls: 클래스 number 
 
-        # 초기
         if self.last_detected_class is None:
             self.last_detected_class = cls
             self.class_count = 1
@@ -121,15 +112,9 @@ class Traffic():
         if cls == self.last_detected_class:
             self.class_count += 1
         else:
-            print('이전과 다름')
-            if self.class_count < 2:
-                print('2회미만')
-                self.last_detected_class = cls
-                return
-            else: # 이전 클래스 2회 이상이면 업데이트
-                self.last_detected_class = cls
-                self.class_count = 1
-                return 
+            self.last_detected_class = cls
+            self.class_count = 1
+            return
             
         label = f'{traffic_info(cls).name} {conf:.2f}' 
 
@@ -224,26 +209,26 @@ class Traffic():
             print('조건 박스 없음')
             cv2.imshow('YOLO Traffic Detection', self.result_image)
             return
-        
-        boxes = sorted(results.boxes, key=lambda b: b.conf[0], reverse=True)
-        best_box = boxes[0]
+        ###########
+        # boxes = sorted(results.boxes, key=lambda b: b.conf[0], reverse=True)
+        # best_box = boxes[0]
 
-        x1, y1, x2, y2 = map(int, best_box.xyxy[0]) 
-        cls = int(best_box.cls[0])  # 클래스 인덱스
-        conf = float(best_box.conf[0])  # 신뢰도
-        label = f'{self.model.names[cls]} {conf:.2f}' # 출력용
-        # cls_name = self.model.names[cls]  
-        print(f'cls:{cls}, label:{label}')
-        self.traffic_cnt_check(cls, conf, x1,y1,x2,y2)
+        # x1, y1, x2, y2 = map(int, best_box.xyxy[0]) 
+        # cls = int(best_box.cls[0])  # 클래스 인덱스
+        # conf = float(best_box.conf[0])  # 신뢰도
+        # label = f'{self.model.names[cls]} {conf:.2f}' # 출력용
+        # # cls_name = self.model.names[cls]  
+        # print(f'cls:{cls}, label:{label}')
+        # self.traffic_cnt_check(cls, conf, x1,y1,x2,y2)
 
         ############# 전체 object 기준
-        # for box in results.boxes:
-            # x1, y1, x2, y2 = map(int, box.xyxy[0]) 
-            # cls = int(box.cls[0])  # 클래스 인덱스
-            # conf = float(box.conf[0])  # 신뢰도
-            # label = f'{self.model.names[cls]} {conf:.2f}'
-            # cls = self.model.names[cls] 
-            # self.traffic_cnt_check(cls, label, x1,y1,x2,y2)
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0]) 
+            cls = int(box.cls[0])  # 클래스 인덱스
+            conf = float(box.conf[0])  # 신뢰도
+            label = f'{self.model.names[cls]} {conf:.2f}'
+            cls_name = self.model.names[cls] 
+            self.traffic_cnt_check(cls, conf, x1,y1,x2,y2)
 
         cv2.imshow('YOLO Traffic Detection', self.result_image)
         
@@ -266,7 +251,7 @@ def main():
     traffic = Traffic(video_mode=VIDEO_MODE, video_path=VIDEO_PATH)
 
     if VIDEO_MODE:
-        rate = rospy.Rate(1)  
+        rate = rospy.Rate(33)
         while not rospy.is_shutdown():
             ret, frame = traffic.cap.read()
             if not ret:
@@ -280,10 +265,6 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-###################
-# 픽스 해야할 것
-# 카메라 각도, FOV
 
 ####################
 # 멀리 있는 신호등과 가까이 있는 신호등이 다른 경우

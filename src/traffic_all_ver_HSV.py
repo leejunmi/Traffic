@@ -49,15 +49,18 @@ class TrafficLightDetector:
 
         self.red_lower = np.array([0, 120, 70])
         self.red_upper = np.array([10, 255, 255])
-
         self.red_lower2 = np.array([170, 200, 200])
         self.red_upper2 = np.array([180, 255, 255])
-
         self.yellow_lower = np.array([20, 70, 70])  
         self.yellow_upper = np.array([35, 255, 255])  
-
         self.green_lower = np.array([35, 80, 80]) 
         self.green_upper = np.array([100, 255, 255])  
+        ###### 여기까지 원주 디폴트값
+
+        # self.green_lower = np.array([35, 50, 50]) 
+        # self.green_upper = np.array([100, 255, 255])  
+        # self.yellow_lower = np.array([20, 50, 50])  
+        # self.yellow_upper = np.array([35, 255, 255])  
 
         self.red_mask = cv2.inRange(self.hsv1, self.red_lower, self.red_upper)
         self.red_mask2 = cv2.inRange(self.hsv1, self.red_lower2, self.red_upper2) # 쨍한 빨간색 추가
@@ -132,25 +135,18 @@ class Traffic():
         self.class_count = 0
 
         # PT_PATH = '/home/macaron/best_train_custom2.pt'
-        # PT_PATH = '/home/macaron/best_0729.pt'
         PT_PATH = '/home/leejunmi/catkin_ws/src/vision/src/best_train_custom2.pt'
-
         self.model = YOLO(PT_PATH)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model.to(self.device)
 
         self.traffic_pub = rospy.Publisher('/stop', Bool, queue_size=5)
 
-        self.traffic_flag = False
-
         self.video_mode = video_mode
         self.video_path = video_path
 
-        if not self.video_mode: # morai
-            self.camera_img = rospy.Subscriber('/image_jpeg/compressed', CompressedImage, self.img_callback, queue_size=1)
-        else:
+        if self.video_mode:
             self.cap = cv2.VideoCapture(video_path)
-
             if not self.cap.isOpened():
                 rospy.logerr("no video")
                 exit()
@@ -248,6 +244,9 @@ class Traffic():
                 cv2.rectangle(self.result_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
                 cv2.putText(self.result_image, label, (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            else:
+                self.traffic_pub.publish(Bool(data=False))
+
             
                 
         
@@ -255,8 +254,8 @@ class Traffic():
         # cv2.imshow('origin', img)
         # print(f'img shape: {img.shape}')
 
-        self.result_image = self.roi_img(img)
-        # self.result_image = img.copy()
+        # self.result_image = self.roi_img(img)
+        self.result_image = img.copy()
         
 
         results = self.model(self.result_image)[0]
@@ -316,18 +315,13 @@ class Traffic():
 def main():
     rospy.init_node('traffic_sign')
 
-    # True = 영상 / False = morai
-    VIDEO_MODE = True
-    VIDEO_PATH = "/home/leejunmi/VIDEO/output1.avi" 
-    # VIDEO_PATH = "/home/leejunmi/catkin_ws/src/vision/src/no_gps_NoObstacle#5.mp4"
-    # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/no_gps_obstacle#5.avi'
-    # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/스크린샷, 2025년 07월 28일 20시 35분 13초.webm'
-    # VIDEO_PATH = '/home/leejunmi/catkin_ws/src/vision/src/스크린샷, 2025년 07월 28일 20시 33분 33초.webm'
+    VIDEO_MODE = True  # ← MORAI 사용 시 반드시 False
+    VIDEO_PATH = "/home/leejunmi/VIDEO/output1.avi"
 
     traffic = Traffic(video_mode=VIDEO_MODE, video_path=VIDEO_PATH)
 
     if VIDEO_MODE:
-        rate = rospy.Rate(33)  
+        rate = rospy.Rate(33)
         while not rospy.is_shutdown():
             ret, frame = traffic.cap.read()
             if not ret:
@@ -336,7 +330,15 @@ def main():
             traffic.yolo_detection(frame)
             rate.sleep()
     else:
-        rospy.spin()
+        from sensor_msgs.msg import CompressedImage
+        while not rospy.is_shutdown():
+            try:
+                msg = rospy.wait_for_message('/image_jpeg/compressed', CompressedImage)
+                img = traffic.bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
+                traffic.yolo_detection(img)
+            except Exception as e:
+                rospy.logerr(f"[WAIT ERROR] {e}")
+
 
 
 if __name__ == '__main__':
