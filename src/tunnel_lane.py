@@ -11,6 +11,7 @@ import numpy as np
 from std_msgs.msg import Float32
 from cv_bridge import CvBridge
 from sensor_msgs.msg import CompressedImage
+import math
 
 class CvLanedetection(object):
     def __init__(self, video_mode=False, video_path=None):
@@ -26,6 +27,8 @@ class CvLanedetection(object):
         self.white_mask = None
         self.yellow_mask = None
         self.all_mask = None
+
+        self.mask = None
 
         self.w = 640
         self.h = 480
@@ -73,7 +76,7 @@ class CvLanedetection(object):
         """픽셀 합이 가장 큰 열(x)을 기준으로 슬라이딩 윈도우 탐색 시작점을 파악"""
         histogram = np.sum(self.warp_img[int(self.h/3):, :], axis=0)
 
-        X_offset = 90                                                                  #### 수정
+        X_offset = 10                                                                  #### 수정
         right_offset = self.w//2 + X_offset
 
         left_slice = histogram[:self.w//2 - X_offset]
@@ -278,15 +281,44 @@ class CvLanedetection(object):
     def remove_sloped_and_small(self, canny_img: np.ndarray, min_num):
         h, w = canny_img.shape
         cleaned = canny_img.copy()
-        cleaned[:h // 3 *2, :] = 0 # ROI 제한
 
+        cleaned[: 320, :] = 0
+
+        ############ 직선 차선+터널 기준,, 
         num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
 
         for L in range(1, num_labels):
+            # 1) 작은 컴포넌트 제거
+            max_num = 1000
+            area = stats[L, cv2.CC_STAT_AREA]
+            if area < min_num:
+                cleaned[labels == L] = 0
+                continue
+            
+            # 현재 라벨 마스크 & 바운딩박스
+            x, y, bw, bh, _ = stats[L]
+            comp_mask = (labels[y:y+bh, x:x+bw] == L).astype(np.uint8) * 255
+
+            # 2) 다각형 근사: 꼭짓점 4개 이상이면 제거
+            contours, _ = cv2.findContours(comp_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                    cleaned[labels == L] = 0
+                    continue
+            
+            elif area > 200:
+                cnt = max(contours, key=cv2.contourArea)
+                peri = cv2.arcLength(cnt, True)
+                approx = cv2.approxPolyDP(cnt, 0.01 * peri, True)  # epsilon은 필요 시 조정
+                if len(approx) >= 5:
+                    cleaned[labels == L] = 0
+                    continue
+
+            # 3) 수평(에 가까운) 성분 제거
             ys, xs = np.where(labels == L)
             if len(xs) < 2:
                 cleaned[labels == L] = 0
                 continue
+
             pts = np.column_stack([xs, ys]).astype(np.float32)
             vx, vy, _, _ = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
             angle_rad = np.arctan2(vy, vx)
@@ -295,12 +327,35 @@ class CvLanedetection(object):
             if near_horiz:
                 cleaned[labels == L] = 0
 
-        # num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
-        # for L in range(1, num_labels):
-        #     if stats[L, cv2.CC_STAT_AREA] < min_num:
-        #         cleaned[labels == L] = 0
-
         return cleaned
+    
+    def Hough(self,img):
+        '''터널 직선용'''
+        img[: 300, :] = 0
+
+        linesP = cv2.HoughLinesP(img, 1, np.pi/180, 50, None, 30, 30)
+
+        if linesP is not None:
+            lines = linesP.reshape(-1, 4)
+
+            lengths = np.sqrt((lines[:,2]-lines[:,0])**2 + (lines[:,3]-lines[:,1])**2)
+            sorted_lines = lines[np.argsort(-lengths)]
+            sorted_lines = lines[lengths>150]
+
+            # print(len(sorted_lines))
+            # print(lengths)
+            for i in range(len(sorted_lines)):
+                x1, y1, x2, y2 = map(int, sorted_lines[i])
+
+                dx = x2 - x1
+                dy = y2 - y1
+
+                angle = math.atan2(dy, dx)  # 라디안
+
+                if abs(angle) > 0.1:
+                    cv2.line(self.real_img, (x1, y1), (x2, y2), (0,0,255), 3, cv2.LINE_AA)
+
+
 
     def process_frame(self, img):
         self.real_img = img.copy()
@@ -312,13 +367,17 @@ class CvLanedetection(object):
         g = cv2.cvtColor(self.real_img, cv2.COLOR_BGR2GRAY)
         g = cv2.GaussianBlur(g, (5,5), 0)
         g = cv2.Canny(g, 70, 20)
-        g = self.remove_sloped_and_small(g, 50)
+        # g = self.remove_sloped_and_small(g, 50)
+
+        self.mask = np.zeros(img.shape[:2], dtype=np.uint8)
+        '''직선, 터널용(화살표 제거)'''
+        img = self.Hough(g)
 
         try:
             cv2.imshow('canny', g)
         except:
             pass
-
+        
         h, w = g.shape[:2]
 
         src = np.float32([
@@ -366,8 +425,8 @@ class CvLanedetection(object):
 
 def main():
     rospy.init_node('cv_lane_node')
-    VIDEO_MODE = True 
-    VIDEO_PATH = "/home/leejunmi/VIDEO/lane3.avi"
+    VIDEO_MODE = True
+    VIDEO_PATH = "/home/leejunmi/VIDEO/lane2.avi"
 
     node = CvLanedetection(video_mode=VIDEO_MODE, video_path=VIDEO_PATH)
 
